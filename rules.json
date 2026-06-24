@@ -1,0 +1,28 @@
+{
+  "hotkey": "ctrl+alt+q",
+  "phrase_hotkey": "ctrl+alt+w",
+  "auto_paste": false,
+  "ocr_lang": "zh-Hant",
+  "rules": [
+    {
+      "keywords": ["出席", "參加", "請假"],
+      "output": "奉核後予以公假登記"
+    },
+    {
+      "keywords": ["知悉"],
+      "output": "知悉"
+    },
+    {
+      "keywords": ["擬辦"],
+      "output": "如擬"
+    },
+    {
+      "keywords": ["請核示"],
+      "output": "可"
+    },
+    {
+      "keywords": ["請查照"],
+      "output": "閱"
+    }
+  ]
+}

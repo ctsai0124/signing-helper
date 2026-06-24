@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>公文簽核快速貼上工具 — 說明與操作示範</title>
+<style>
+  :root{
+    --ink:#1d1b18; --sub:#5c574e; --paper:#f6f3ec; --sheet:#ffffff;
+    --line:#e4ded2; --blue:#1f5f8b; --seal:#b5402f; --dim:rgba(12,14,18,.5);
+    --tip-bg:#eef4f8; --tip-bd:#bcd6e6; --warn-bg:#fbefec; --warn-bd:#e6b8ad; --mono-bg:#f1efe8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;line-height:1.7;font-size:16px;}
+  .page{max-width:860px;margin:0 auto;padding:0 16px 56px;}
+
+  .masthead{text-align:center;padding:42px 0 26px;border-bottom:3px double var(--ink);}
+  .eyebrow{font-size:12px;letter-spacing:.3em;color:var(--seal);font-weight:800;margin:0 0 10px;}
+  h1{font-size:30px;margin:0;font-weight:800;}
+  .masthead p{margin:14px auto 0;color:var(--sub);font-size:15px;max-width:620px;}
+
+  .section-h{margin:40px 0 14px;font-size:18px;font-weight:800;color:var(--blue);
+    letter-spacing:.06em;border-bottom:2px solid var(--blue);display:inline-block;padding-bottom:3px;}
+
+  /* ===== 動畫示範 ===== */
+  .demo{display:flex;flex-direction:column;align-items:center;}
+  .tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;justify-content:center;}
+  .tab{font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--sub);
+    background:#efece4;border:1px solid var(--line);border-radius:22px;padding:8px 16px;transition:all .2s;}
+  .tab.active{background:var(--seal);color:#fff;border-color:var(--seal);box-shadow:0 3px 10px rgba(181,64,47,.3);}
+  .stage{position:relative;width:100%;max-width:740px;height:430px;background:var(--sheet);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.08);}
+  .topbar{height:30px;background:#eceae4;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:0 12px;}
+  .dot{width:9px;height:9px;border-radius:50%;background:#cfc9bd;}
+  .work{display:flex;height:calc(100% - 30px);}
+  .doc{flex:1 1 58%;padding:18px 20px;border-right:1px solid var(--line);position:relative;}
+  .doc .gov{text-align:center;font-size:15px;font-weight:800;letter-spacing:.3em;margin-bottom:12px;}
+  .doc .ln{height:9px;background:#ece8df;border-radius:3px;margin:8px 0;}
+  .ln.s1{width:86%;}.ln.s2{width:72%;}.ln.s3{width:90%;}
+  .label{font-size:12.5px;color:var(--sub);margin:12px 0 4px;font-weight:700;}
+  .target{position:relative;display:inline-block;font-size:14.5px;line-height:1.7;padding:3px 4px;border-radius:3px;}
+  .kw{font-weight:800;transition:color .3s,background .3s;}
+  .selbox{position:absolute;left:-5px;top:-3px;width:calc(100% + 10px);height:calc(100% + 6px);
+    border:2px dashed var(--blue);background:rgba(31,95,139,.14);border-radius:3px;transform:scale(0,1);transform-origin:left center;opacity:0;}
+  .scan{position:absolute;left:-5px;top:-3px;width:calc(100% + 10px);height:calc(100% + 6px);overflow:hidden;opacity:0;border-radius:3px;}
+  .scan i{position:absolute;top:0;left:-40px;width:38px;height:100%;background:linear-gradient(90deg,transparent,rgba(31,95,139,.55),transparent);}
+  .panel{flex:1 1 42%;padding:18px 16px;background:#fcfbf8;position:relative;}
+  .panel .pt{font-size:12.5px;font-weight:800;color:var(--blue);margin:0 0 9px;letter-spacing:.08em;}
+  .commentbox{border:1.5px solid var(--line);border-radius:6px;background:#fff;height:90px;padding:10px 12px;font-size:14px;transition:border-color .3s;}
+  .typed{display:inline-block;white-space:normal;overflow:hidden;width:0;vertical-align:bottom;}
+  .caret{display:none;width:2px;height:16px;background:var(--seal);vertical-align:-2px;margin-left:1px;animation:blink .8s step-end infinite;}
+  @keyframes blink{50%{opacity:0;}}
+  .dim{position:absolute;inset:0;background:var(--dim);opacity:0;pointer-events:none;transition:opacity .35s;}
+  .hk{position:absolute;top:14px;left:50%;transform:translateX(-50%) translateY(-8px);background:#23262e;color:#fff;
+    font-size:13px;font-weight:700;padding:7px 14px;border-radius:8px;opacity:0;transition:all .3s;box-shadow:0 6px 18px rgba(0,0,0,.3);z-index:6;}
+  .hk kbd{font-family:Consolas,monospace;background:#3a3e48;border-radius:4px;padding:1px 6px;}
+  .bubble{position:absolute;background:#fff;border:1px solid var(--blue);color:var(--blue);font-size:12.5px;font-weight:700;
+    padding:5px 11px;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.12);opacity:0;transform:translateY(6px);transition:all .35s;white-space:nowrap;}
+  .bubble.recog{left:20px;bottom:108px;}
+  .bubble.rule{left:20px;bottom:74px;border-color:var(--seal);color:var(--seal);}
+  .learnchip{position:absolute;left:20px;bottom:40px;background:#eef6ee;border:1px solid #9ec79e;color:#2e7d32;
+    font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:12px;opacity:0;transform:translateY(6px);transition:all .35s;white-space:nowrap;}
+  .clip{position:absolute;right:16px;bottom:16px;background:#fff;border:1px solid var(--seal);border-radius:8px;
+    padding:7px 11px;font-size:12.5px;font-weight:700;color:var(--seal);box-shadow:0 4px 14px rgba(0,0,0,.12);opacity:0;transform:translateY(8px);transition:all .35s;max-width:200px;}
+  .clip small{display:block;font-size:10px;color:var(--sub);font-weight:600;letter-spacing:.1em;}
+  .toast{position:absolute;right:16px;bottom:118px;background:#23262e;color:#fff;font-size:12.5px;font-weight:700;
+    padding:7px 12px;border-radius:8px;opacity:0;transform:translateY(8px);transition:all .35s;}
+  .pp{position:absolute;top:46px;right:16px;width:300px;background:#fff;border:1px solid var(--line);
+    border-radius:10px;overflow:hidden;box-shadow:0 14px 36px rgba(0,0,0,.22);opacity:0;transform:translateX(20px) scale(.97);transition:all .4s;z-index:5;}
+  .pp .pph{background:var(--seal);color:#fff;font-size:13px;font-weight:800;padding:9px 14px;}
+  .pp .pps{margin:10px 12px 4px;border:1px solid var(--line);border-radius:5px;padding:6px 9px;font-size:13px;color:var(--ink);min-height:16px;}
+  .pp .pps .ic{color:var(--sub);}
+  .pp .ppl{padding:6px 6px 10px;}
+  .pp .row{font-size:12.5px;padding:8px 10px;border-radius:5px;color:var(--ink);transition:background .2s;}
+  .pipe{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;justify-content:center;}
+  .pchip{font-size:12.5px;font-weight:700;color:var(--sub);background:#efece4;border:1px solid var(--line);border-radius:20px;padding:6px 14px;transition:all .3s;}
+  .ctrl{margin-top:14px;}
+  .replay{font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 18px;}
+  .replay:hover{filter:brightness(1.08);}
+  [data-mode="a"] .only-b{display:none!important;}
+  [data-mode="b"] .only-a{display:none!important;}
+  [data-mode="a"][data-phase="hotkey"] .hk-a,[data-mode="a"][data-phase="select"] .hk-a{opacity:1;transform:translateX(-50%) translateY(0);}
+  [data-mode="a"][data-phase="hotkey"] .dim,[data-mode="a"][data-phase="select"] .dim{opacity:1;}
+  [data-mode="a"][data-phase="select"] .selbox{opacity:1;transform:scale(1,1);transition:transform 1.2s ease,opacity .3s;}
+  [data-mode="a"][data-phase="ocr"] .selbox,[data-mode="a"][data-phase="match"] .selbox{opacity:1;transform:scale(1,1);}
+  [data-mode="a"][data-phase="ocr"] .scan{opacity:1;}
+  [data-mode="a"][data-phase="ocr"] .scan i{animation:sweep 1.1s ease forwards;}
+  @keyframes sweep{from{left:-40px;}to{left:100%;}}
+  [data-mode="a"][data-phase="ocr"] .bubble.recog,[data-mode="a"][data-phase="match"] .bubble.recog{opacity:1;transform:translateY(0);}
+  [data-mode="a"][data-phase="match"] .bubble.rule,[data-mode="a"][data-phase="copy"] .bubble.rule{opacity:1;transform:translateY(0);}
+  [data-mode="a"][data-phase="match"] .kw,[data-mode="a"][data-phase="copy"] .kw{color:#fff;background:var(--seal);border-radius:3px;padding:0 3px;}
+  [data-mode="a"][data-phase="done"] .learnchip{opacity:1;transform:translateY(0);}
+  [data-mode="a"][data-phase="copy"] .clip-a,[data-mode="a"][data-phase="paste"] .clip-a,[data-mode="a"][data-phase="done"] .clip-a{opacity:1;transform:translateY(0);}
+  [data-mode="a"][data-phase="copy"] .toast{opacity:1;transform:translateY(0);}
+  [data-mode="a"][data-phase="paste"] .commentbox,[data-mode="a"][data-phase="done"] .commentbox{border-color:var(--seal);}
+  [data-mode="a"][data-phase="paste"] .ca-caret{display:inline-block;}
+  [data-mode="a"][data-phase="paste"] .typed-a{width:9.4em;animation:typeA 1.1s steps(9) forwards;}
+  [data-mode="a"][data-phase="done"] .typed-a{width:9.4em;}
+  @keyframes typeA{from{width:0;}to{width:9.4em;}}
+  [data-mode="b"][data-phase="hotkey"] .hk-b,[data-mode="b"][data-phase="open"] .hk-b{opacity:1;transform:translateX(-50%) translateY(0);}
+  [data-mode="b"][data-phase="open"] .pp,[data-mode="b"][data-phase="type"] .pp,[data-mode="b"][data-phase="filter"] .pp,[data-mode="b"][data-phase="pick"] .pp{opacity:1;transform:translateX(0) scale(1);}
+  [data-mode="b"][data-phase="type"] .ppt{width:2.2em;animation:typeT 1s steps(2) forwards;}
+  [data-mode="b"][data-phase="filter"] .ppt,[data-mode="b"][data-phase="pick"] .ppt{width:2.2em;}
+  @keyframes typeT{from{width:0;}to{width:2.2em;}}
+  [data-mode="b"][data-phase="filter"] .row.nomatch,[data-mode="b"][data-phase="pick"] .row.nomatch{display:none;}
+  [data-mode="b"][data-phase="pick"] .row.target{background:var(--seal);color:#fff;}
+  [data-mode="b"][data-phase="copy"] .clip-b,[data-mode="b"][data-phase="paste"] .clip-b,[data-mode="b"][data-phase="done"] .clip-b{opacity:1;transform:translateY(0);}
+  [data-mode="b"][data-phase="copy"] .toast{opacity:1;transform:translateY(0);}
+  [data-mode="b"][data-phase="paste"] .commentbox,[data-mode="b"][data-phase="done"] .commentbox{border-color:var(--seal);}
+  [data-mode="b"][data-phase="paste"] .cb-caret{display:inline-block;}
+  [data-mode="b"][data-phase="paste"] .typed-b{width:12.4em;animation:typeB 1.2s steps(12) forwards;}
+  [data-mode="b"][data-phase="done"] .typed-b{width:12.4em;}
+  @keyframes typeB{from{width:0;}to{width:12.4em;}}
+  [data-mode="a"][data-phase="hotkey"] .a1,[data-mode="a"][data-phase="select"] .a1,
+  [data-mode="a"][data-phase="ocr"] .a2,[data-mode="a"][data-phase="match"] .a3,
+  [data-mode="a"][data-phase="copy"] .a4,[data-mode="a"][data-phase="paste"] .a4,[data-mode="a"][data-phase="done"] .a4{
+    background:var(--seal);color:#fff;border-color:var(--seal);box-shadow:0 3px 10px rgba(181,64,47,.3);}
+  [data-mode="b"][data-phase="hotkey"] .b1,[data-mode="b"][data-phase="open"] .b1,
+  [data-mode="b"][data-phase="type"] .b2,[data-mode="b"][data-phase="filter"] .b3,[data-mode="b"][data-phase="pick"] .b3,
+  [data-mode="b"][data-phase="copy"] .b4,[data-mode="b"][data-phase="paste"] .b4,[data-mode="b"][data-phase="done"] .b4{
+    background:var(--seal);color:#fff;border-color:var(--seal);box-shadow:0 3px 10px rgba(181,64,47,.3);}
+
+  /* ===== 說明 ===== */
+  .step{display:flex;gap:22px;padding:22px 0;border-top:1px solid var(--line);}
+  .chop{flex:0 0 auto;width:48px;height:48px;background:var(--seal);color:#fff;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;box-shadow:0 0 0 3px #fff,0 0 0 4px var(--seal);}
+  .sbody{flex:1 1 auto;min-width:0;}
+  .sbody h3{margin:2px 0 8px;font-size:19px;font-weight:800;}
+  .sbody h3 .tag{font-size:12px;font-weight:700;color:var(--seal);border:1px solid var(--seal);border-radius:4px;padding:1px 7px;margin-left:10px;vertical-align:3px;}
+  .sbody p{margin:6px 0;} .sbody ol,.sbody ul{margin:6px 0;padding-left:20px;} .sbody li{margin:4px 0;}
+  code.cmd{display:block;font-family:Consolas,monospace;font-size:13.5px;line-height:1.6;background:var(--mono-bg);
+    border:1px solid var(--line);border-left:3px solid var(--blue);padding:9px 12px;margin:8px 0;white-space:pre-wrap;word-break:break-all;border-radius:3px;}
+  kbd{font-family:Consolas,monospace;font-size:13px;background:#fff;border:1px solid #b9b2a4;border-bottom-width:2px;border-radius:4px;padding:1px 6px;white-space:nowrap;}
+  .files{font-family:Consolas,monospace;font-size:13.5px;background:var(--mono-bg);padding:2px 6px;border-radius:3px;}
+  .note{padding:11px 15px;margin:10px 0;border-radius:4px;font-size:14.5px;}
+  .note.warn{background:var(--warn-bg);border:1px solid var(--warn-bd);}
+  .note.tip{background:var(--tip-bg);border:1px solid var(--tip-bd);}
+  .note b{font-weight:800;} .note .ico{font-weight:800;margin-right:6px;}
+  .warn .ico{color:var(--seal);} .tip .ico{color:var(--blue);}
+  .qa{border-top:1px solid var(--line);padding:14px 0;}
+  .qa .q{font-weight:800;margin:0 0 4px;} .qa .q::before{content:"狀況　";color:var(--seal);}
+  .qa .a{margin:0;color:var(--sub);} .qa .a::before{content:"處理　";color:var(--blue);font-weight:800;}
+  .two{display:flex;gap:16px;flex-wrap:wrap;margin-top:8px;}
+  .card{flex:1 1 280px;border:1px solid var(--line);border-radius:8px;padding:16px 18px;background:#fcfbf8;}
+  .card h4{margin:0 0 6px;font-size:16px;} .card .hkx{font-family:Consolas,monospace;font-size:13px;color:var(--seal);font-weight:700;}
+  footer{margin-top:40px;border-top:3px double var(--ink);padding-top:16px;font-size:13px;color:var(--sub);}
+
+  @media(max-width:560px){h1{font-size:24px;}.stage{height:440px;}.pp{width:250px;}.step{gap:14px;}.chop{width:42px;height:42px;font-size:20px;}}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">公 文 簽 核 快 速 貼 上 工 具</p>
+    <h1>圈選辨識，或從詞庫挑一句，自動進剪貼簿</h1>
+    <p>在公文簽核系統裡，框住公文關鍵字（或從常用擬辦詞庫搜尋一句），對應批示用語就自動複製，按 Ctrl+V 貼上即可。本機 OCR、離線、免費、不需 AI。</p>
+  </header>
+
+  <h2 class="section-h">操作示範</h2>
+  <div class="demo">
+    <div class="tabs">
+      <button class="tab active" id="tabA">① 圈選辨識　Ctrl+Alt+Q</button>
+      <button class="tab" id="tabB">② 詞庫速選　Ctrl+Alt+W</button>
+    </div>
+    <div class="stage" id="stage" data-mode="a" data-phase="idle">
+      <div class="topbar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+      <div class="work">
+        <div class="doc">
+          <div class="gov">高雄市政府　函</div>
+          <div class="ln s1"></div><div class="ln s2"></div>
+          <div class="label">擬辦：</div>
+          <div class="target">本府同仁<span class="kw">出席</span>本次研習，請准予公假。
+            <span class="selbox only-a"></span><span class="scan only-a"><i></i></span>
+          </div>
+          <div class="ln s3" style="margin-top:14px;"></div><div class="ln s1"></div>
+          <div class="bubble recog only-a">辨識到：…出席本次研習…</div>
+          <div class="bubble rule only-a">命中規則「出席」</div>
+          <div class="learnchip only-a">✓ 誤讀已自動學起來，下次更快</div>
+        </div>
+        <div class="panel">
+          <p class="pt">會辦意見</p>
+          <div class="commentbox">
+            <span class="typed typed-a only-a">奉核後予以公假登記</span><span class="caret ca-caret only-a"></span>
+            <span class="typed typed-b only-b">奉核後提會辦理敘獎事宜。</span><span class="caret cb-caret only-b"></span>
+          </div>
+        </div>
+      </div>
+      <div class="dim only-a"></div>
+      <div class="hk hk-a only-a">按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Q</kbd></div>
+      <div class="hk hk-b only-b">按 <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>W</kbd></div>
+      <div class="toast">✓ 已複製</div>
+      <div class="clip clip-a only-a"><small>剪貼簿</small>奉核後予以公假登記</div>
+      <div class="clip clip-b only-b"><small>剪貼簿</small>奉核後提會辦理敘獎事宜。</div>
+      <div class="pp only-b">
+        <div class="pph">公文擬辦詞庫</div>
+        <div class="pps"><span class="ic">🔍</span> <span class="ppt" style="display:inline-block;white-space:nowrap;overflow:hidden;width:0;vertical-align:bottom;">敘獎</span></div>
+        <div class="ppl">
+          <div class="row nomatch">陳閱後文存。</div>
+          <div class="row target">奉核後提會辦理敘獎事宜。</div>
+          <div class="row">提會辦理敘獎事宜。</div>
+          <div class="row nomatch">依來文辦理。</div>
+        </div>
+      </div>
+    </div>
+    <div class="pipe only-a">
+      <span class="pchip a1">1　圈選</span><span class="pchip a2">2　辨識</span><span class="pchip a3">3　比對</span><span class="pchip a4">4　貼上</span>
+    </div>
+    <div class="pipe only-b">
+      <span class="pchip b1">1　叫出詞庫</span><span class="pchip b2">2　搜尋</span><span class="pchip b3">3　選取</span><span class="pchip b4">4　貼上</span>
+    </div>
+    <div class="ctrl"><button class="replay" id="replay">▶ 重新播放</button></div>
+  </div>
+
+  <h2 class="section-h">主要功能</h2>
+  <div class="two">
+    <div class="card"><h4>圈選辨識　<span class="hkx">Ctrl+Alt+Q</span></h4>
+      <p>框住公文裡的關鍵字，本機 OCR 辨識後依規則自動把對應批示放進剪貼簿。</p></div>
+    <div class="card"><h4>詞庫速選　<span class="hkx">Ctrl+Alt+W</span></h4>
+      <p>跳出常用擬辦詞庫，搜尋幾個字即時篩選，點一句即複製。</p></div>
+    <div class="card"><h4>規則與詞庫可自訂</h4>
+      <p>關鍵字、批示、詞庫都能在程式裡新增、編輯、刪除，並可匯入 .txt。</p></div>
+    <div class="card"><h4>自動學習</h4>
+      <p>OCR 偶爾把字看錯也能對到正確批示，並把誤讀記起來，越用越準。</p></div>
+  </div>
+
+  <h2 class="section-h">安裝與使用</h2>
+  <div class="step">
+    <div class="chop">1</div>
+    <div class="sbody">
+      <h3>安裝繁體中文 OCR<span class="tag">必做一次</span></h3>
+      <p>工具靠它讀公文上的字。以系統管理員開啟 PowerShell，確認：</p>
+      <code class="cmd">Get-WindowsCapability -Online | Where-Object Name -like "*OCR*zh*"</code>
+      <p>看 <b>zh-TW</b> 是否 <b>Installed</b>；若是 <b>NotPresent</b> 則安裝：</p>
+      <code class="cmd">Add-WindowsCapability -Online -Name "Language.OCR~~~zh-TW~0.0.1.0"</code>
+    </div>
+  </div>
+  <div class="step">
+    <div class="chop">2</div>
+    <div class="sbody">
+      <h3>啟動</h3>
+      <p><b>開發／自用：</b>裝 Python 後在資料夾執行 <span class="files">pip install -r requirements.txt</span>，再 <span class="files">python signing_tool.py</span>。</p>
+      <p><b>打包成 exe：</b>雙擊 <span class="files">build.bat</span>，會產生 <span class="files">SigningHelper.exe</span> 與一個可分享的 <span class="files">share</span> 資料夾。</p>
+      <div class="note warn"><span class="ico">⚠</span>請用「<b>以系統管理員身分執行</b>」，全域快捷鍵才會生效。第一次開 exe 跳藍色警告屬正常（沒有付費簽章），按「更多資訊 → 仍要執行」。</div>
+    </div>
+  </div>
+  <div class="step">
+    <div class="chop">3</div>
+    <div class="sbody">
+      <h3>兩種用法</h3>
+      <p><b>圈選辨識（Ctrl+Alt+Q）：</b>畫面變暗後拖曳框住關鍵字 → 命中後右下角顯示「已複製」→ 到欄位按 <kbd>Ctrl</kbd>+<kbd>V</kbd>。</p>
+      <p><b>詞庫速選（Ctrl+Alt+W）：</b>跳出詞庫，搜尋後點一句即複製，再 <kbd>Ctrl</kbd>+<kbd>V</kbd>。</p>
+    </div>
+  </div>
+
+  <div class="note tip"><span class="ico">＋</span><b>公文字太小讀不到：</b>把檢視器顯示放大到 150~200%（<kbd>Ctrl</kbd>+滑鼠滾輪），或用 Windows 放大鏡（<kbd>Win</kbd>+<kbd>+</kbd>），再框選最有效。</div>
+
+  <h2 class="section-h">常見狀況</h2>
+  <div class="qa"><p class="q">快捷鍵沒反應</p><p class="a">用「以系統管理員身分執行」重開程式。</p></div>
+  <div class="qa"><p class="q">按 Ctrl+Alt+Q 跳出系統剪取工具</p><p class="a">快捷鍵撞到了，在主視窗改成別的組合再套用。</p></div>
+  <div class="qa"><p class="q">顯示「OCR 沒讀到字」</p><p class="a">多半字太小，先放大檢視器再框；仍不行可參考程式資料夾的 <span class="files">last_capture.png</span>。</p></div>
+
+  <div class="note warn"><span class="ico">⚠</span><b>隱私提醒：</b><span class="files">learned.json</span>（自動學習記憶）可能累積你實際公文的片段，已預設排除在版本控制外；自訂規則或詞庫時，請勿放入真實姓名或單位內部資訊再公開。</div>
+
+  <footer>公文簽核快速貼上工具　|　本機 OCR、離線、免費　|　兩個快捷鍵：Ctrl+Alt+Q 圈選辨識、Ctrl+Alt+W 詞庫速選。</footer>
+
+</div>
+
+<script>
+  const stage=document.getElementById('stage');
+  const flows={
+    a:[['idle',900],['hotkey',900],['select',1500],['ocr',1500],['match',1400],['copy',1100],['paste',1700],['done',1700]],
+    b:[['idle',900],['hotkey',900],['open',1100],['type',1300],['filter',1100],['pick',1200],['copy',1000],['paste',1800],['done',1700]]
+  };
+  let mode='a',i=0,timer=null;
+  function step(){const seq=flows[mode];const it=seq[i];stage.dataset.phase=it[0];i=(i+1)%seq.length;timer=setTimeout(step,it[1]);}
+  function start(m){if(m){mode=m;}stage.dataset.mode=mode;clearTimeout(timer);i=0;step();}
+  document.getElementById('tabA').addEventListener('click',function(){this.classList.add('active');document.getElementById('tabB').classList.remove('active');start('a');});
+  document.getElementById('tabB').addEventListener('click',function(){this.classList.add('active');document.getElementById('tabA').classList.remove('active');start('b');});
+  document.getElementById('replay').addEventListener('click',function(){start();});
+  start('a');
+</script>
+</body>
+</html>

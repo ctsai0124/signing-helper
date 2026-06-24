@@ -1,0 +1,17 @@
+# 自動學習記憶與辨識暫存（可能含實際公文片段，請勿上傳）
+learned.json
+last_capture.png
+last_ocr.txt
+
+# 打包產物
+build/
+dist/
+share/
+*.spec
+
+# Python
+__pycache__/
+*.pyc
+
+# 壓縮檔
+*.zip

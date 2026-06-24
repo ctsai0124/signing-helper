@@ -1,0 +1,4 @@
+pillow
+pyperclip
+keyboard
+winocr

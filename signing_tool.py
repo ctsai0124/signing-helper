@@ -94,6 +94,7 @@ DEFAULT_CONFIG = {
     "hotkey": "ctrl+alt+q",
     "phrase_hotkey": "ctrl+alt+w",
     "auto_paste": False,
+    "paste_delay": 500,
     "ocr_lang": "zh-Hant",
     "rules": [
         {"keywords": ["出席", "參加", "請假"], "output": "奉核後予以公假登記"},
@@ -113,6 +114,7 @@ def load_config():
             cfg.setdefault("hotkey", "ctrl+alt+q")
             cfg.setdefault("phrase_hotkey", "ctrl+alt+w")
             cfg.setdefault("auto_paste", False)
+            cfg.setdefault("paste_delay", 500)
             cfg.setdefault("ocr_lang", "zh-Hant")
             cfg.setdefault("rules", [])
             # 兼容：若 keywords 寫成字串，轉成清單
@@ -577,13 +579,11 @@ class PhrasePanel:
     def _select(self, phrase):
         if pyperclip:
             pyperclip.copy(phrase)
-        auto = bool(self.app.cfg.get("auto_paste"))
         self.close()
         preview = phrase if len(phrase) <= 16 else phrase[:16] + "…"
         self.app.status.set(f"已複製：{preview}")
         self.app._toast(f"已複製：{preview}")
-        if auto:
-            self.app.root.after(180, self.app._do_paste)
+        self.app._schedule_paste()
 
     def _select_first(self):
         items = self._filtered()
@@ -691,7 +691,18 @@ class App:
             row=0, column=3, rowspan=2, padx=2)
         ttk.Checkbutton(top, text="選取後自動貼上", variable=self.autopaste_var,
                         command=self._toggle_autopaste).grid(
-            row=0, column=4, rowspan=2, padx=10)
+            row=0, column=4, padx=10, sticky="w")
+        ttk.Label(top, text="貼上時機：").grid(row=1, column=4, sticky="e", pady=2)
+        self.delay_label_to_ms = {"馬上貼": 0, "延遲0.5秒": 500, "延遲2秒": 2000}
+        cur_ms = int(self.cfg.get("paste_delay", 500))
+        cur_label = next((k for k, v in self.delay_label_to_ms.items()
+                          if v == cur_ms), "延遲0.5秒")
+        self.delay_var = tk.StringVar(value=cur_label)
+        delay_box = ttk.Combobox(top, textvariable=self.delay_var, width=10,
+                                 state="readonly",
+                                 values=list(self.delay_label_to_ms.keys()))
+        delay_box.grid(row=1, column=5, padx=6, sticky="w")
+        delay_box.bind("<<ComboboxSelected>>", lambda e: self._apply_delay())
 
         # 規則清單
         mid = ttk.Frame(self.root)
@@ -886,6 +897,18 @@ class App:
         self.cfg["auto_paste"] = bool(self.autopaste_var.get())
         save_config(self.cfg)
 
+    def _apply_delay(self):
+        ms = self.delay_label_to_ms.get(self.delay_var.get(), 500)
+        self.cfg["paste_delay"] = ms
+        save_config(self.cfg)
+
+    def _schedule_paste(self):
+        """依設定的延遲自動貼上（兩種快捷鍵共用）。"""
+        if not self.cfg.get("auto_paste"):
+            return
+        delay = int(self.cfg.get("paste_delay", 500))
+        self.root.after(max(0, delay), self._do_paste)
+
     def _do_paste(self):
         if keyboard is not None:
             try:
@@ -968,8 +991,10 @@ class App:
             if pyperclip:
                 pyperclip.copy(out)
             note = "（已學起來）" if learned else ""
-            self.status.set(f"命中「{kw}」→ 已複製：{out}{note}（按 Ctrl+V 貼上）")
+            tip = "（自動貼上中）" if self.cfg.get("auto_paste") else "（按 Ctrl+V 貼上）"
+            self.status.set(f"命中「{kw}」→ 已複製：{out}{note}{tip}")
             self._toast(f"已複製：{out}")
+            self._schedule_paste()
         elif text:
             preview = (text[:20] + "…") if len(text) > 20 else text
             self.status.set(f"沒有命中規則。辨識內容：{preview}")

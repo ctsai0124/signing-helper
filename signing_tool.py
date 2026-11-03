@@ -198,8 +198,10 @@ def load_learned():
 
 def save_learned(d):
     try:
-        with open(LEARNED_PATH, "w", encoding="utf-8") as f:
+        temp_path = LEARNED_PATH + ".tmp"
+        with open(temp_path, "w", encoding="utf-8") as f:
             json.dump(d, f, ensure_ascii=False, indent=2)
+        os.replace(temp_path, LEARNED_PATH)
     except Exception:
         pass
 
@@ -329,23 +331,22 @@ def _fuzzy_find(text, keyword):
 
 def match_output(text, rules, learned=None):
     """
-    比對順序：學過的別名 → 規則關鍵字（完全） → 模糊比對（差一字）。
+    比對順序：規則關鍵字（完全）→ 已確認的別名 → 模糊比對（差一字）。
     回傳 (要貼出的文字, 命中關鍵字, 要學起來的別名或None)。
     """
     cleaned = "".join(text.split())
     if not cleaned:
         return None, None, None
-    # 1) 學過的誤讀別名（完全包含）
-    if learned:
-        for alias, out in learned.items():
-            if alias and alias in cleaned:
-                return out, alias, None
-    # 2) 規則關鍵字（完全包含）
+    # 完全命中優先，避免舊別名遮蔽明確規則。
     for rule in rules:
         for kw in rule.get("keywords", []):
             kw = kw.strip()
             if kw and kw in cleaned:
                 return rule.get("output", ""), kw, None
+    if learned:
+        for alias, out in learned.items():
+            if alias and alias in cleaned:
+                return out, alias, None
     # 3) 模糊比對（差一字），命中就回傳並標記要學的別名
     for rule in rules:
         out = rule.get("output", "")
@@ -689,6 +690,8 @@ class App:
             row=0, column=2, rowspan=2, padx=6)
         ttk.Button(top, text="開啟詞庫", command=self._open_phrases).grid(
             row=0, column=3, rowspan=2, padx=2)
+        ttk.Button(top, text="管理學習", command=self._manage_learning).grid(
+            row=2, column=3, padx=2, pady=3)
         ttk.Checkbutton(top, text="選取後自動貼上", variable=self.autopaste_var,
                         command=self._toggle_autopaste).grid(
             row=0, column=4, padx=10, sticky="w")
@@ -941,11 +944,12 @@ class App:
     def _process(self, bbox):
         try:
             img = ImageGrab.grab(bbox=bbox, all_screens=True)
-            # 除錯：把框到的畫面存檔，方便診斷
-            try:
-                img.save(os.path.join(app_dir(), "last_capture.png"))
-            except Exception:
-                pass
+            # 診斷截圖可能含公文個資，僅在明確啟用時儲存。
+            if os.environ.get("SIGNING_HELPER_DEBUG_CAPTURE") == "1":
+                try:
+                    img.save(os.path.join(app_dir(), "last_capture.png"))
+                except Exception:
+                    pass
 
             lang = self.cfg.get("ocr_lang", "zh-Hant")
             best_text = ""
@@ -963,38 +967,24 @@ class App:
                     best_text = txt
                     break
 
-            try:
-                with open(os.path.join(app_dir(), "last_ocr.txt"),
-                          "w", encoding="utf-8") as f:
-                    f.write(best_text if best_text
-                            else ("（沒讀到字）\nOCR 錯誤：" + LAST_OCR_ERROR))
-            except Exception:
-                pass
-
-            # 自動學習：把這次靠模糊比對救回來的誤讀記起來
-            learned_now = False
-            if learn:
-                alias, alias_out = learn
-                if alias and alias not in self.learned:
-                    self.learned[alias] = alias_out
-                    save_learned(self.learned)
-                    learned_now = True
+            if os.environ.get("SIGNING_HELPER_DEBUG_CAPTURE") == "1":
+                try:
+                    with open(os.path.join(app_dir(), "last_ocr.txt"),
+                              "w", encoding="utf-8") as f:
+                        f.write(best_text if best_text
+                                else ("（沒讀到字）\nOCR 錯誤：" + LAST_OCR_ERROR))
+                except Exception:
+                    pass
 
             self.root.after(
-                0, lambda: self._finish_process(out, kw, best_text, learned_now))
+                0, lambda: self._finish_process(out, kw, best_text, learn))
         except Exception as e:
             self.root.after(0, lambda: self._fail_process(str(e)))
 
-    def _finish_process(self, out, kw, text, learned=False):
+    def _finish_process(self, out, kw, text, learn=None):
         self._capturing = False
         if out:
-            if pyperclip:
-                pyperclip.copy(out)
-            note = "（已學起來）" if learned else ""
-            tip = "（自動貼上中）" if self.cfg.get("auto_paste") else "（按 Ctrl+V 貼上）"
-            self.status.set(f"命中「{kw}」→ 已複製：{out}{note}{tip}")
-            self._toast(f"已複製：{out}")
-            self._schedule_paste()
+            self._review_result(out, kw, text, learn)
         elif text:
             preview = (text[:20] + "…") if len(text) > 20 else text
             self.status.set(f"沒有命中規則。辨識內容：{preview}")
@@ -1002,6 +992,84 @@ class App:
         else:
             self.status.set(f"OCR 沒讀到字：{LAST_OCR_ERROR}")
             self._toast("OCR 沒讀到字")
+
+    def _review_result(self, output, keyword, ocr_text, learn):
+        """完整預覽並允許編輯；只有使用者確認後才複製及學習。"""
+        win = tk.Toplevel(self.root)
+        win.title("核對批示文字")
+        win.geometry("620x340")
+        win.transient(self.root)
+        win.lift()
+        win.focus_force()
+        body = ttk.Frame(win, padding=12)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text=f"辨識文字：{ocr_text[:160]}", wraplength=580).pack(anchor="w")
+        ttk.Label(body, text=f"命中：{keyword}。請核對並可修改下方完整批示：").pack(anchor="w", pady=(10, 4))
+        editor = tk.Text(body, height=5, wrap="word")
+        editor.pack(fill="both", expand=True)
+        editor.insert("1.0", output)
+        editor.focus_set()
+        learn_var = tk.BooleanVar(value=False)
+        if learn:
+            ttk.Checkbutton(body, text=f"確認這次 OCR 誤讀「{learn[0]}」並記住對應批示",
+                            variable=learn_var).pack(anchor="w", pady=5)
+        buttons = ttk.Frame(body)
+        buttons.pack(fill="x", pady=(8, 0))
+
+        def copy_reviewed():
+            result = editor.get("1.0", "end-1c").strip()
+            if not result:
+                messagebox.showwarning("批示為空", "請輸入要複製的文字。", parent=win)
+                return
+            if pyperclip is None:
+                messagebox.showerror("剪貼簿不可用", "目前無法複製，請確認 pyperclip 已安裝。", parent=win)
+                return
+            try:
+                pyperclip.copy(result)
+            except Exception as exc:
+                messagebox.showerror("複製失敗", str(exc), parent=win)
+                return
+            if learn and learn_var.get() and result == output:
+                alias = learn[0]
+                self.learned[alias] = result
+                save_learned(self.learned)
+            self.status.set(f"已核對並複製：{result}")
+            win.destroy()
+            self._schedule_paste()
+
+        ttk.Button(buttons, text="複製上方文字", command=copy_reviewed).pack(side="left")
+        ttk.Button(buttons, text="還原系統文字",
+                   command=lambda: (editor.delete("1.0", "end"), editor.insert("1.0", output))).pack(side="left", padx=6)
+        ttk.Button(buttons, text="取消", command=win.destroy).pack(side="right")
+
+    def _manage_learning(self):
+        win = tk.Toplevel(self.root)
+        win.title("管理已確認的 OCR 記憶")
+        win.geometry("620x360")
+        body = ttk.Frame(win, padding=12)
+        body.pack(fill="both", expand=True)
+        ttk.Label(body, text="選取錯誤對應可刪除；變更會立即儲存於 learned.json。").pack(anchor="w")
+        tree = ttk.Treeview(body, columns=("alias", "output"), show="headings")
+        tree.heading("alias", text="OCR 誤讀")
+        tree.heading("output", text="對應批示")
+        tree.pack(fill="both", expand=True, pady=8)
+
+        def refresh():
+            tree.delete(*tree.get_children())
+            for alias, output in sorted(self.learned.items()):
+                tree.insert("", "end", values=(alias, output))
+
+        def delete_selected():
+            selected = tree.selection()
+            if not selected:
+                return
+            for item in selected:
+                self.learned.pop(tree.item(item, "values")[0], None)
+            save_learned(self.learned)
+            refresh()
+
+        ttk.Button(body, text="刪除選取記憶", command=delete_selected).pack(anchor="w")
+        refresh()
 
     def _fail_process(self, msg):
         self._capturing = False

@@ -1,0 +1,11 @@
+learned.json
+learned.json.tmp
+last_capture.png
+last_ocr.txt
+build/
+dist/
+share/
+*.spec
+*.zip
+__pycache__/
+*.pyc
